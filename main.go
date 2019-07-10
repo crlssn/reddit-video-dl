@@ -38,8 +38,8 @@ type RedditVideo struct {
 }
 
 type DownloadResult struct {
-	Completed bool
-	Error     error
+	Success bool
+	Error   error
 }
 
 var verboseOutput = flag.Bool("v", false, "Display encoding output")
@@ -47,7 +47,6 @@ var verboseOutput = flag.Bool("v", false, "Display encoding output")
 func main() {
 	flag.Parse()
 
-	//url := "https://www.reddit.com/r/HadToHurt/comments/c9i6pj/ouch/ "
 	var url string
 	fmt.Print("Enter Reddit URL: ")
 
@@ -104,29 +103,28 @@ func main() {
 	videoId := strings.Split(videoUrl, "/")[3]
 	videoFilePath := videoId + "_input.mp4"
 
-	videoDownloaded := make(chan DownloadResult)
-	go DownloadFile(videoFilePath, videoUrl, videoDownloaded)
+	videoCh := make(chan DownloadResult)
+	go DownloadFile(videoFilePath, videoUrl, videoCh)
 
 	audioUrl := strings.Join([]string{"https://v.redd.it", videoId, "audio"}, "/")
 	audioFilePath := videoId + "_input.mp3"
 
-	audioDownloaded := make(chan DownloadResult)
-	go DownloadFile(audioFilePath, audioUrl, audioDownloaded)
+	audioCh := make(chan DownloadResult)
+	go DownloadFile(audioFilePath, audioUrl, audioCh)
 
 	fmt.Println("Downloading files...")
 
 	select {
-	case videoResult := <-videoDownloaded:
-		audioResult := <-audioDownloaded
-		if videoResult.Error != nil {
-			log.Fatal(videoResult.Error)
+	case videoDl := <-videoCh: audioDl := <-audioCh
+		if videoDl.Error != nil {
+			log.Fatal(videoDl.Error)
 		}
 
-		if audioResult.Error != nil {
-			log.Fatal(audioResult.Error)
+		if audioDl.Error != nil {
+			log.Fatal(audioDl.Error)
 		}
 
-		if videoResult.Completed && audioResult.Completed {
+		if videoDl.Success && audioDl.Success {
 			concatFile := concatFiles(videoFilePath, audioFilePath, videoId)
 
 			fmt.Printf("Video file is completed (file://%s)\n", concatFile)
@@ -168,24 +166,24 @@ func concatFiles(videoFilePath string, audioFilePath string, videoId string) str
 	return resultFile
 }
 
-func logg(a ...interface{}) {
-	fmt.Print(a)
-}
-
 func DownloadFile(filepath string, url string, ch chan<- DownloadResult) {
 	resp, err := http.Get(url)
+
 	if err != nil {
 		ch <- DownloadResult{false, err}
 	}
+
 	defer resp.Body.Close()
 
-	out, err := os.Create(filepath)
+	file, err := os.Create(filepath)
+
 	if err != nil {
 		ch <- DownloadResult{false, err}
 	}
-	defer out.Close()
 
-	_, err = io.Copy(out, resp.Body)
+	defer file.Close()
+
+	_, err = io.Copy(file, resp.Body)
 
 	ch <- DownloadResult{true, err}
 }
