@@ -64,27 +64,7 @@ func main() {
 		url = url + ".json"
 	}
 
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", url, nil)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:68.0) Gecko/20100101 Firefox/68.0")
-	res, err := client.Do(req)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer res.Body.Close()
-
-	body, err := ioutil.ReadAll(res.Body)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	err, body := getBodyFromUrl(url)
 
 	var Listings []Listing
 
@@ -115,7 +95,8 @@ func main() {
 	fmt.Println("Downloading files...")
 
 	select {
-	case videoDl := <-videoCh: audioDl := <-audioCh
+	case videoDl := <-videoCh:
+		audioDl := <-audioCh
 		if videoDl.Error != nil {
 			log.Fatal(videoDl.Error)
 		}
@@ -130,6 +111,32 @@ func main() {
 			fmt.Printf("Video file is completed (file://%s)\n", concatFile)
 		}
 	}
+}
+
+func getBodyFromUrl(url string) (error, []byte) {
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.14; rv:68.0) Gecko/20100101 Firefox/68.0")
+	res, err := client.Do(req)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer res.Body.Close()
+
+	body, err := ioutil.ReadAll(res.Body)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return err, body
 }
 
 func concatFiles(videoFilePath string, audioFilePath string, videoId string) string {
