@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -41,9 +42,11 @@ type DownloadResult struct {
 	Error     error
 }
 
-// flags for verbose
+var verboseOutput = flag.Bool("v", false, "Display encoding output")
 
 func main() {
+	flag.Parse()
+
 	//url := "https://www.reddit.com/r/HadToHurt/comments/c9i6pj/ouch/ "
 	var url string
 	fmt.Print("Enter Reddit URL: ")
@@ -93,6 +96,11 @@ func main() {
 	}
 
 	videoUrl := Listings[0].Data.Children[0].Data.SecureMedia.RedditVideo.FallbackUrl
+	if len(videoUrl) < 1 {
+		fmt.Print("No media file was found")
+		os.Exit(0)
+	}
+
 	videoId := strings.Split(videoUrl, "/")[3]
 	videoFilePath := videoId + "_input.mp4"
 
@@ -105,8 +113,11 @@ func main() {
 	audioDownloaded := make(chan DownloadResult)
 	go DownloadFile(audioFilePath, audioUrl, audioDownloaded)
 
+	fmt.Println("Downloading files...")
+
 	select {
-	case videoResult := <-videoDownloaded: audioResult := <-audioDownloaded
+	case videoResult := <-videoDownloaded:
+		audioResult := <-audioDownloaded
 		if videoResult.Error != nil {
 			log.Fatal(videoResult.Error)
 		}
@@ -118,18 +129,24 @@ func main() {
 		if videoResult.Completed && audioResult.Completed {
 			concatFile := concatFiles(videoFilePath, audioFilePath, videoId)
 
-			log.Printf("Video download completed, %s", concatFile)
+			fmt.Printf("Video file is completed (file://%s)\n", concatFile)
 		}
 	}
 }
 
 func concatFiles(videoFilePath string, audioFilePath string, videoId string) string {
-	resultFile := videoId + ".mp4"
+	fmt.Println("Concatenating audio and video...")
+
+	wd, _ := os.Getwd()
+
+	resultFile := wd + videoId + ".mp4"
 	args := []string{"-y", "-i", videoFilePath, "-i", audioFilePath, resultFile}
 
 	cmd := exec.Command("ffmpeg", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	if *verboseOutput {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
 	err := cmd.Run()
 
 	if err != nil {
