@@ -36,10 +36,15 @@ type RedditVideo struct {
 	FallbackUrl string `json:"fallback_url"`
 }
 
+type DownloadResult struct {
+	Completed bool
+	Error     error
+}
+
 // flags for verbose
 
 func main() {
-	//url := "https://www.reddit.com/r/HadToHurt/comments/c9i6pj/ouch/.json"
+	//url := "https://www.reddit.com/r/HadToHurt/comments/c9i6pj/ouch/ "
 	var url string
 	fmt.Print("Enter Reddit URL: ")
 
@@ -75,8 +80,6 @@ func main() {
 
 	body, err := ioutil.ReadAll(res.Body)
 
-	logg(string(body))
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -90,62 +93,85 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// download audio and video in go routines just because
-
 	videoUrl := Listings[0].Data.Children[0].Data.SecureMedia.RedditVideo.FallbackUrl
 	videoId := strings.Split(videoUrl, "/")[3]
 	videoFilePath := videoId + "_input.mp4"
 
-	err = DownloadFile(videoFilePath, videoUrl)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	videoDownloaded := make(chan DownloadResult)
+	go DownloadFile(videoFilePath, videoUrl, videoDownloaded)
 
 	audioUrl := strings.Join([]string{"https://v.redd.it", videoId, "audio"}, "/")
 	audioFilePath := videoId + "_input.mp3"
 
-	err = DownloadFile(audioFilePath, audioUrl)
+	audioDownloaded := make(chan DownloadResult)
+	go DownloadFile(audioFilePath, audioUrl, audioDownloaded)
 
-	if err != nil {
-		log.Fatal(err)
+	select {
+	case videoResult := <-videoDownloaded: audioResult := <-audioDownloaded
+		if videoResult.Error != nil {
+			log.Fatal(videoResult.Error)
+		}
+
+		if audioResult.Error != nil {
+			log.Fatal(audioResult.Error)
+		}
+
+		if videoResult.Completed && audioResult.Completed {
+			concatFile := concatFiles(videoFilePath, audioFilePath, videoId)
+
+			log.Printf("Video download completed, %s", concatFile)
+		}
 	}
+}
 
-	args := []string{"-y", "-i", videoFilePath, "-i", audioFilePath, videoId + ".mp4"}
+func concatFiles(videoFilePath string, audioFilePath string, videoId string) string {
+	resultFile := videoId + ".mp4"
+	args := []string{"-y", "-i", videoFilePath, "-i", audioFilePath, resultFile}
+
 	cmd := exec.Command("ffmpeg", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	err = cmd.Run()
+	err := cmd.Run()
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	os.Remove(audioFilePath)
-	os.Remove(videoFilePath)
+	err = os.Remove(audioFilePath)
 
-	log.Print("Video download completed")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = os.Remove(videoFilePath)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return resultFile
 }
 
 func logg(a ...interface{}) {
 	fmt.Print(a)
 }
 
-func DownloadFile(filepath string, url string) error {
+func DownloadFile(filepath string, url string, ch chan<- DownloadResult) {
 	resp, err := http.Get(url)
 	if err != nil {
-		return err
+		ch <- DownloadResult{false, err}
 	}
 	defer resp.Body.Close()
 
 	out, err := os.Create(filepath)
 	if err != nil {
-		return err
+		ch <- DownloadResult{false, err}
 	}
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
-	return err
+
+	ch <- DownloadResult{true, err}
 }
 
 func testData() []byte {
