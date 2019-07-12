@@ -60,7 +60,7 @@ func main() {
 		}
 	}
 
-	if ! strings.HasSuffix(url, ".json") {
+	if !strings.HasSuffix(url, ".json") {
 		url = url + ".json"
 	}
 
@@ -143,8 +143,7 @@ func concatFiles(videoFilePath string, audioFilePath string, videoId string) str
 	fmt.Println("Concatenating audio and video...")
 
 	wd, _ := os.Getwd()
-
-	resultFile := wd + videoId + ".mp4"
+	resultFile := wd + "/output/" + videoId + ".mp4"
 	args := []string{"-y", "-i", videoFilePath, "-i", audioFilePath, resultFile}
 
 	cmd := exec.Command("ffmpeg", args...)
@@ -174,7 +173,7 @@ func concatFiles(videoFilePath string, audioFilePath string, videoId string) str
 }
 
 func DownloadFile(filepath string, url string, ch chan<- DownloadResult) {
-	resp, err := http.Get(url)
+	resp, err := http.Get(url	)
 
 	if err != nil {
 		ch <- DownloadResult{false, err}
