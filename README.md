@@ -1,6 +1,6 @@
 ### Video Downloader for Reddit
 
-A simple CLI client to download videos with audio that has been uploaded to Reddit.
+A simple CLI client to download videos that has been uploaded to Reddit, with audio.
 
 #### Prerequisite
 In order to concatenate the media files we need to have `ffmpeg` installed. 
